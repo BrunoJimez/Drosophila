@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Animação Cinematográfica - A Vida da Mosca-da-Fruta (30s)</title>
+  <style>
+    body {
+      background-color: #08080a;
+      color: #f0eae1;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 400;
+      letter-spacing: 1.5px;
+      color: #e2c08d;
+      margin: 0 0 4px 0;
+      text-transform: uppercase;
+    }
+    p {
+      color: #7a756c;
+      font-size: 0.85rem;
+      margin: 0;
+    }
+    .canvas-container {
+      position: relative;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 20px rgba(226, 192, 141, 0.1);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #28241e;
+    }
+    canvas {
+      display: block;
+      background: #0d0c0a;
+    }
+    .controls {
+      margin-top: 18px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    button {
+      padding: 12px 28px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: #12100e;
+      background: linear-gradient(135deg, #e2c08d, #b88e52);
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      transition: all 0.25s ease;
+    }
+    button:hover {
+      background: linear-gradient(135deg, #f3d8aa, #c99e60);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(226, 192, 141, 0.3);
+    }
+    button:disabled {
+      background: #2a2620;
+      color: #666;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    #timeDisplay {
+      font-family: monospace;
+      font-size: 0.9rem;
+      color: #a89f91;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>A Vida de Drosophila melanogaster</h1>
+    <p>Renderização procedural vetorial em tempo real - 30 Segundos</p>
+  </div>
+
+  <div class="canvas-container">
+    <canvas id="canvas" width="800" height="800"></canvas>
+  </div>
+
+  <div class="controls">
+    <button id="btnExport">Gravar e Exportar Vídeo HD (.webm)</button>
+    <span id="timeDisplay">00:00 / 00:30</span>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const btnExport = document.getElementById('btnExport');
+    const timeDisplay = document.getElementById('timeDisplay');
+
+    const FPS = 60;
+    const DURATION_SEC = 30;
+    const TOTAL_FRAMES = FPS * DURATION_SEC; // 1800 Quadros
+    let frame = 0;
+
+    // Funções Suaves de Transição e Interpolação (Easing)
+    function easeInOutCubic(t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+    function lerp(start, end, amt) {
+      return (1 - amt) * start + amt * end;
+    }
+
+    // --- EFEITOS DE ELEMENTOS DO AMBIENTE ---
+
+    // Textura de Papel Antigo / Pergaminho Científico
+    function drawPaperBackground(isDarkBlueprint = false) {
+      if (isDarkBlueprint) {
+        ctx.fillStyle = '#0a0e17';
+        ctx.fillRect(0, 0, 800, 800);
+
+        // Grade de Blueprint / Microscópio
+        ctx.strokeStyle = 'rgba(40, 90, 160, 0.12)';
+        ctx.lineWidth = 1;
+        for (let x = 0; x < 800; x += 40) {
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 800); ctx.stroke();
+        }
+        for (let y = 0; y < 800; y += 40) {
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(800, y); ctx.stroke();
+        }
+        return;
+      }
+
+      // Fundo Pergaminho Quente
+      ctx.fillStyle = '#161310';
+      ctx.fillRect(0, 0, 800, 800);
+
+      const radGrad = ctx.createRadialGradient(400, 400, 100, 400, 400, 520);
+      radGrad.addColorStop(0, '#28211a');
+      radGrad.addColorStop(0.7, '#15110d');
+      radGrad.addColorStop(1, '#080705');
+      ctx.fillStyle = radGrad;
+      ctx.fillRect(0, 0, 800, 800);
+
+      // Círculos concêntricos de diâmetro técnico
+      ctx.strokeStyle = 'rgba(212, 175, 118, 0.04)';
+      ctx.lineWidth = 1;
+      for (let r = 100; r <= 500; r += 100) {
+        ctx.beginPath();
+        ctx.arc(400, 400, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    // Casca de Fruta Procedural (Textura celular tipo Voronoi)
+    function drawFruitTexture(cx, cy, radius, type = 'orange') {
+      ctx.save();
+      ctx.translate(cx, cy);
+
+      const grad = ctx.createRadialGradient(0, 0, 10, 0, 0, radius);
+      if (type === 'orange') {
+        grad.addColorStop(0, '#d97724');
+        grad.addColorStop(0.8, '#a64b03');
+        grad.addColorStop(1, '#592202');
+      } else {
+        grad.addColorStop(0, '#e6b800');
+        grad.addColorStop(0.8, '#997a00');
+        grad.addColorStop(1, '#4d3d00');
+      }
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Células da Casca
+      ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 180; i++) {
+        const ang = (i * 137.5) * Math.PI / 180;
+        const r = Math.sqrt(i) * (radius / 14);
+        if (r < radius - 10) {
+          ctx.beginPath();
+          ctx.arc(Math.cos(ang) * r, Math.sin(ang) * r, 6 + (i % 4), 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+
+    // --- ANATOMIA DETALHADA DA MOSCA (CINEMATOGRÁFICA) ---
+    function drawFlyUltra(x, y, scale, rotation, wingBeatPhase, isMale = true) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(rotation);
+      ctx.scale(scale, scale);
+
+      // Sombra projetada no chão
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.beginPath();
+      ctx.ellipse(5, 12, 35, 50, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // --- PATAS (6 Patas articuladas com garras) ---
+      ctx.strokeStyle = '#231810';
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      const legPositions = [
+        { x1: -12, y1: -10, midX: -45, midY: -30, endX: -60, endY: -45 }, // Frontal Esq
+        { x1: 12,  y1: -10, midX: 45,  midY: -30, endX: 60,  endY: -45 }, // Frontal Dir
+        { x1: -15, y1: 5,   midX: -55, midY: 5,   endX: -70, endY: 10 },  // Média Esq
+        { x1: 15,  y1: 5,   midX: 55,  midY: 5,   endX: 70,  endY: 10 },  // Média Dir
+        { x1: -12, y1: 25,  midX: -48, midY: 45,  endX: -62, endY: 68 },  // Traseira Esq
+        { x1: 12,  y1: 25,  midX: 48,  midY: 45,  endX: 62,  endY: 68 }   // Traseira Dir
+      ];
+
+      legPositions.forEach(leg => {
+        ctx.beginPath();
+        ctx.moveTo(leg.x1, leg.y1);
+        ctx.lineTo(leg.midX, leg.midY);
+        ctx.lineTo(leg.endX, leg.endY);
+        ctx.stroke();
+      });
+
+      // --- ASAS HIGH-DETAIL (Membrana Iridescente & Venações Completa) ---
+      const drawAdvancedWing = (isRight) => {
+        ctx.save();
+        const side = isRight ? 1 : -1;
+        ctx.scale(side, 1);
+
+        const wingAngle = -0.3 + Math.sin(wingBeatPhase) * 0.12;
+        ctx.rotate(wingAngle);
+
+        // Gradient Iridescente (Efeito prisma de luz)
+        const wingGrad = ctx.createLinearGradient(0, 0, 140, -180);
+        wingGrad.addColorStop(0, 'rgba(230, 240, 255, 0.5)');
+        wingGrad.addColorStop(0.4, 'rgba(180, 220, 210, 0.35)');
+        wingGrad.addColorStop(0.8, 'rgba(240, 190, 210, 0.25)');
+        wingGrad.addColorStop(1, 'rgba(255, 230, 200, 0.1)');
+
+        ctx.fillStyle = wingGrad;
+        ctx.strokeStyle = '#2d1e18';
+        ctx.lineWidth = 1.4;
+
+        // Contorno da Asa
+        ctx.beginPath();
+        ctx.moveTo(8, -12);
+        ctx.bezierCurveTo(35, -90, 110, -185, 138, -135);
+        ctx.bezierCurveTo(150, -85, 85, -25, 8, -12);
+        ctx.fill();
+        ctx.stroke();
+
+        // Veias Primárias e Secundárias
+        ctx.strokeStyle = 'rgba(50, 32, 22, 0.75)';
+        ctx.lineWidth = 0.9;
+
+        ctx.beginPath();
+        // Costa e Subcosta
+        ctx.moveTo(8, -12); ctx.bezierCurveTo(30, -80, 95, -165, 130, -138);
+        // Radius e Media
+        ctx.moveTo(22, -38); ctx.quadraticCurveTo(75, -105, 128, -140);
+        ctx.moveTo(22, -38); ctx.quadraticCurveTo(80, -80, 118, -92);
+        ctx.moveTo(22, -38); ctx.quadraticCurveTo(65, -55, 88, -48);
+        ctx.stroke();
+
+        // Veias Transversais Finais
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(68, -98); ctx.lineTo(76, -78);
+        ctx.moveTo(98, -118); ctx.lineTo(100, -88);
+        ctx.stroke();
+
+        ctx.restore();
+      };
+
+      drawAdvancedWing(false);
+      drawAdvancedWing(true);
+
+      // --- ABDÔMEN (Segmentado e Listrado) ---
+      ctx.save();
+      ctx.translate(0, 28);
+
+      const abdGrad = ctx.createLinearGradient(-30, 0, 30, 0);
+      abdGrad.addColorStop(0, '#6e472b');
+      abdGrad.addColorStop(0.5, '#ba8b5d');
+      abdGrad.addColorStop(1, '#6e472b');
+      ctx.fillStyle = abdGrad;
+
+      ctx.beginPath();
+      ctx.ellipse(0, 38, 28, 58, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Listras Melanizadas de Drosophila
+      ctx.fillStyle = isMale ? '#1a0f08' : '#2b1a0e';
+      const stripes = isMale ? 5 : 6;
+      for (let i = 0; i < stripes; i++) {
+        const yP = 8 + i * 16;
+        ctx.beginPath();
+        ctx.ellipse(0, yP, 26 - i * 3, 6, 0, 0, Math.PI);
+        ctx.fill();
+      }
+
+      // Hachuras finas de cerdas abdominais
+      ctx.strokeStyle = 'rgba(20, 10, 5, 0.35)';
+      ctx.lineWidth = 0.8;
+      for (let h = -20; h <= 20; h += 4) {
+        ctx.beginPath();
+        ctx.moveTo(h, 0);
+        ctx.lineTo(h, 80 - Math.abs(h) * 1.5);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // --- TÓRAX ---
+      const thorGrad = ctx.createRadialGradient(-6, -10, 4, 0, -8, 30);
+      thorGrad.addColorStop(0, '#e2b382');
+      thorGrad.addColorStop(0.7, '#8f5a34');
+      thorGrad.addColorStop(1, '#422410');
+      ctx.fillStyle = thorGrad;
+
+      ctx.beginPath();
+      ctx.ellipse(0, -8, 24, 28, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#26160b';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+
+      // Cerdas Dorsais Grandes (Macrochaetae)
+      ctx.strokeStyle = '#120a05';
+      ctx.lineWidth = 1.3;
+      [-16, -8, 8, 16].forEach(bx => {
+        ctx.beginPath();
+        ctx.moveTo(bx, -18);
+        ctx.quadraticCurveTo(bx * 1.4, -32, bx * 1.6, -38);
+        ctx.stroke();
+      });
+
+      // --- CABEÇA E OLHOS COMPOSTOS REDESIGNADOS ---
+      ctx.fillStyle = '#8f532b';
+      ctx.beginPath();
+      ctx.ellipse(0, -38, 16, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Olhos Compostos com Reflexo Esférico
+      const drawEye3D = (xPos) => {
+        ctx.save();
+        ctx.translate(xPos, -40);
+
+        const eyeGrad = ctx.createRadialGradient(-3, -4, 2, 0, 0, 16);
+        eyeGrad.addColorStop(0, '#ff3b30');
+        eyeGrad.addColorStop(0.6, '#a80000');
+        eyeGrad.addColorStop(1, '#3d0000');
+        ctx.fillStyle = eyeGrad;
+
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 13, 16, xPos < 0 ? -0.2 : 0.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Mosaico de Omatídeos (Pontos de luz)
+        ctx.fillStyle = 'rgba(255, 230, 220, 0.4)';
+        for (let ox = -8; ox <= 8; ox += 3) {
+          for (let oy = -10; oy <= 10; oy += 3) {
+            if ((ox * ox) / 70 + (oy * oy) / 150 < 0.7) {
+              ctx.beginPath();
+              ctx.arc(ox, oy, 0.8, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+        }
+        ctx.restore();
+      };
+
+      drawEye3D(-16);
+      drawEye3D(16);
+
+      // Antenas Plumosas (Arista)
+      ctx.strokeStyle = '#1c1008';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-4, -48); ctx.lineTo(-10, -60);
+      ctx.moveTo(4, -48);  ctx.lineTo(10, -60);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // --- REPRODUTOR DE CENAS (NARRATIVA EM 5 ATOS) ---
+    function renderTimeline(f) {
+      const progress = f / TOTAL_FRAMES; // 0.0 a 1.0 em 30 segundos
+      const seconds = f / FPS;
+
+      // ATO 1: 0s a 6s - OVO & MITOSE EMBRIONÁRIA
+      if (seconds < 6) {
+        drawPaperBackground(true);
+        const subProg = seconds / 6;
+
+        ctx.save();
+        ctx.translate(400, 400);
+        ctx.scale(1.2, 1.2);
+
+        // Casca do Ovo
+        ctx.strokeStyle = '#e0f0ff';
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = 'rgba(100, 200, 255, 0.5)';
+        ctx.shadowBlur = 15;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 80, 160, Math.PI / 4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Fibras de Fuso e Células em Mitose
+        const cells = Math.floor(subProg * 32) + 2;
+        ctx.fillStyle = '#ff4d4d';
+        for (let i = 0; i < cells; i++) {
+          const ang = (i / cells) * Math.PI * 2 + f * 0.02;
+          const dist = 35 * Math.sin(i * 1.7 + f * 0.03);
+          const cx = Math.cos(ang) * dist;
+          const cy = Math.sin(ang) * dist;
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Linhas de sinapse celular
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.lineWidth = 0.8;
+          ctx.beginPath();
+          ctx.moveTo(0, 0); ctx.lineTo(cx, cy);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = '#8ab4f8';
+        ctx.font = '14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('ATO I: EMBRIOGÊNESE & DIVISÃO CELULAR', 0, 210);
+        ctx.restore();
+      }
+
+      // ATO 2: 6s a 12s - LARVA & ECLOSÃO NA FRUTA
+      else if (seconds < 12) {
+        drawPaperBackground(false);
+        const subProg = (seconds - 6) / 6;
+
+        // Desenha fruta no fundo
+        drawFruitTexture(400, 400, 320, 'orange');
+
+        ctx.save();
+        ctx.translate(400, 400);
+
+        // Larva rastejando com ondulação física
+        const crawlOffset = Math.sin(f * 0.2) * 15;
+        ctx.strokeStyle = '#f4f1de';
+        ctx.lineWidth = 28;
+        ctx.lineCap = 'round';
+
+        ctx.beginPath();
+        for (let x = -120; x <= 120; x += 12) {
+          const y = Math.sin(x * 0.04 + f * 0.18) * 18;
+          if (x === -120) ctx.moveTo(x + crawlOffset, y);
+          else ctx.lineTo(x + crawlOffset, y);
+        }
+        ctx.stroke();
+
+        // Anéis corporais da larva
+        ctx.strokeStyle = 'rgba(100, 80, 50, 0.3)';
+        ctx.lineWidth = 2;
+        for (let seg = -100; seg <= 100; seg += 20) {
+          ctx.beginPath();
+          ctx.arc(seg + crawlOffset, Math.sin(seg * 0.04 + f * 0.18) * 18, 13, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = '#e2c08d';
+        ctx.font = '14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('ATO II: ECLOSÃO DA LARVA (ALIMENTAÇÃO)', 0, 240);
+        ctx.restore();
+      }
+
+      // ATO 3: 12s a 18s - CONECTOMA NEURAL & EMERGÊNCIA
+      else if (seconds < 18) {
+        drawPaperBackground(true);
+        const subProg = (seconds - 12) / 6;
+
+        ctx.save();
+        ctx.translate(400, 400);
+
+        // Redes neurais ópticas piscando
+        const numNodes = 50;
+        ctx.fillStyle = '#64dfdf';
+        ctx.strokeStyle = 'rgba(100, 223, 223, 0.25)';
+        ctx.lineWidth = 0.8;
+
+        const pts = [];
+        for (let i = 0; i < numNodes; i++) {
+          const a = i * 0.3;
+          const r = 40 + (i * 4) * Math.sin(f * 0.02 + i);
+          pts.push({ x: Math.cos(a) * r, y: Math.sin(a) * r });
+        }
+
+        for (let i = 0; i < numNodes; i++) {
+          for (let j = i + 1; j < numNodes; j++) {
+            const d = Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
+            if (d < 90) {
+              ctx.beginPath();
+              ctx.moveTo(pts[i].x, pts[i].y);
+              ctx.lineTo(pts[j].x, pts[j].y);
+              ctx.stroke();
+            }
+          }
+          ctx.beginPath();
+          ctx.arc(pts[i].x, pts[i].y, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Mosca emerge gradualmente sobre a rede
+        drawFlyUltra(0, 0, subProg * 1.3, 0, f * 0.3, true);
+
+        ctx.fillStyle = '#8ab4f8';
+        ctx.font = '14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('ATO III: METAMORFOSE & REDE NEURAL CEREBRAL', 0, 240);
+        ctx.restore();
+      }
+
+      // ATO 4: 18s a 24s - RITUAL DE CORTEJO E CASAL
+      else if (seconds < 24) {
+        drawPaperBackground(false);
+        const subProg = (seconds - 18) / 6;
+
+        ctx.save();
+        ctx.translate(400, 400);
+
+        // Ondas Sonoras Vermelhas emitidas pelo Macho (Vibração da Asa)
+        const waveR = (f * 4) % 150;
+        ctx.strokeStyle = `rgba(255, 50, 50, ${1 - waveR / 150})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(-80, 0, waveR, -0.8, 0.8);
+        ctx.stroke();
+
+        // Macho (Esquerda)
+        drawFlyUltra(-80, 0, 1.1, Math.PI / 2 + 0.2, f * 0.8, true);
+
+        // Fêmea (Direita)
+        drawFlyUltra(80, 0, 1.25, -Math.PI / 2 - 0.1, f * 0.1, false);
+
+        ctx.fillStyle = '#e2c08d';
+        ctx.font = '14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('ATO IV: DANÇA E RITUAL DE CORTEJO', 0, 240);
+        ctx.restore();
+      }
+
+      // ATO 5: 24s a 30s - CICLO DIA/NOITE & EPÍLOGO
+      else {
+        drawPaperBackground(false);
+        const subProg = (seconds - 24) / 6;
+
+        // Sol / Lua girando em órbita
+        ctx.save();
+        ctx.translate(400, 400);
+
+        const orbitAngle = subProg * Math.PI * 2;
+        const sunX = Math.cos(orbitAngle) * 280;
+        const sunY = Math.sin(orbitAngle) * 280;
+
+        // Sol
+        ctx.fillStyle = '#ffb703';
+        ctx.shadowColor = '#ffb703';
+        ctx.shadowBlur = 25;
+        ctx.beginPath();
+        ctx.arc(sunX, sunY, 20, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Mosca adulta no centro final
+        drawFlyUltra(0, 0, 1.4, 0, f * 0.05, true);
+
+        ctx.fillStyle = '#e2c08d';
+        ctx.font = '14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('ATO V: O CICLO PERPÉTUO DA VIDA', 0, 240);
+        ctx.restore();
+      }
+
+      // Atualiza marcador de tempo
+      const curMin = Math.floor(seconds / 60).toString().padStart(2, '0');
+      const curSec = Math.floor(seconds % 60).toString().padStart(2, '0');
+      timeDisplay.textContent = `${curMin}:${curSec} / 00:30`;
+    }
+
+    // Loop Principal de Renderização
+    function mainLoop() {
+      renderTimeline(frame);
+      frame = (frame + 1) % TOTAL_FRAMES;
+      requestAnimationFrame(mainLoop);
+    }
+    mainLoop();
+
+    // --- GRAVADOR DE VÍDEO HIGH QUALITY (.WEBM) ---
+    btnExport.addEventListener('click', () => {
+      btnExport.disabled = true;
+      frame = 0; // Reinicia para o começo exato
+
+      btnExport.textContent = 'Gravando Filme (30s)...';
+
+      const stream = canvas.captureStream(FPS);
+      const recorder = new MediaRecorder(stream, {
+        mimeType: 'video/webm;codecs=vp9',
+        videoBitsPerSecond: 12000000 // 12 Mbps (Qualidade de Animação Profissional)
+      });
+
+      const chunks = [];
+      recorder.ondataavailable = e => chunks.push(e.data);
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'drosophila_filme_30s.webm';
+        a.click();
+
+        btnExport.disabled = false;
+        btnExport.textContent = 'Gravar e Exportar Vídeo HD (.webm)';
+      };
+
+      recorder.start();
+
+      // Encerra a gravação exatamente após 30 segundos
+      setTimeout(() => {
+        recorder.stop();
+      }, DURATION_SEC * 1000);
+    });
+  </script>
+</body>
+</html>
